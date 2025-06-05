@@ -130,12 +130,17 @@ Note: Environment variables take precedence over values in the configuration fil
    ```bash
    export DB_USER=your_db_user
    export DB_PASSWORD=your_db_password
+   export DB_PORT=your_db_port
+   export DB_USER=your_db_username
+   export DB_NAME=your_db_name
+   export DB_SSLMODE=require
+
    export GITHUB_TOKEN=your_github_token
    ```
 
 3. Start the service:
    ```bash
-   go run cmd/server/main.go
+   make run
    ```
 
 ## API Documentation
