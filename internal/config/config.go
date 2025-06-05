@@ -126,6 +126,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("github.request_timeout", "30s")
 	v.SetDefault("github.max_retries", 3)
 	v.SetDefault("github.retry_backoff", "2s")
+	v.SetDefault("github.interval", "1h") // Set default sync interval
 
 	// Monitor defaults
 	v.SetDefault("monitor.interval", "1h")
@@ -162,6 +163,10 @@ func (c *Config) Validate() error {
 
 	if c.GitHub.Token == "" {
 		return fmt.Errorf("GitHub token is required")
+	}
+
+	if c.GitHub.Interval <= 0 {
+		return fmt.Errorf("GitHub sync interval must be positive")
 	}
 
 	return nil

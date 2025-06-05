@@ -23,6 +23,9 @@ type SyncWorker struct {
 
 // NewSyncWorker creates a new sync worker
 func NewSyncWorker(service *service.Service, syncInterval, defaultAge time.Duration) *SyncWorker {
+	if syncInterval <= 0 {
+		syncInterval = time.Hour // default to 1 hour if not set or invalid
+	}
 	return &SyncWorker{
 		service:      service,
 		syncInterval: syncInterval,
