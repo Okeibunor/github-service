@@ -88,7 +88,7 @@ DB_PORT=5432            # Database port
 DB_USER=postgres        # Database user
 DB_PASSWORD=<secret>    # Database password
 DB_NAME=github_service  # Database name
-DB_SSLMODE=disable     # Database SSL mode
+DB_SSLMODE=require     # Database SSL mode
 
 # GitHub Configuration
 GITHUB_TOKEN=<secret>   # GitHub Personal Access Token
