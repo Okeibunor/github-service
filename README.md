@@ -140,7 +140,7 @@ Note: Environment variables take precedence over values in the configuration fil
 
 3. Start the service:
    ```bash
-   make run
+   go run cmd/github-service/main.go
    ```
 
 ## API Documentation
