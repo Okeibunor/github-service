@@ -52,13 +52,55 @@ make setup
 4. Configure your GitHub token:
 
    - Copy `.env.example` to `.env`
-   - Add your GitHub token to `.env`:
-     ```
-     GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here
-     ```
-   - Or set it directly in your environment:
-     ```bash
+   - Add your GitHub token and other required environment variables to or set it directly in your environment:
+     e.g
+
+     ````bash
      export GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here
+     ``` `.env`:
+
+     ````
+
+     # Environment Variables
+
+     # GitHub API Token (required)
+
+     GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here
+
+     # Database Configuration (required)
+
+     DB_HOST=<host>
+     DB_PORT=<port>
+     DB_USER=<user>
+     DB_PASSWORD=<password>
+     DB_NAME=<db>
+     DB_SSLMODE=require
+
+     # Server Configuration
+
+     SERVER_PORT=8080
+
+     # GitHub Service Configuration (optional)
+
+     GITHUB_SERVICE_MONITOR_INTERVAL=1h
+     GITHUB_SERVICE_MONITOR_ENABLED=true
+     GITHUB_SERVICE_LOG_LEVEL=info
+     GITHUB_SERVICE_LOG_FORMAT=json
+
+     # GitHub API Configuration (optional)
+
+     GITHUB_SERVICE_GITHUB_RATE_LIMIT=1s
+     GITHUB_SERVICE_GITHUB_REQUEST_TIMEOUT=30s
+     GITHUB_SERVICE_GITHUB_MAX_RETRIES=3
+     GITHUB_SERVICE_GITHUB_RETRY_BACKOFF=2s
+
+     # Log Configuration (optional)
+
+     LOG_LEVEL=info
+     LOG_FORMAT=json
+
+     ```
+
      ```
 
 5. Run the service:
