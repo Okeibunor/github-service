@@ -1,16 +1,42 @@
-# Binaries for programs and plugins
+# Configuration files with secrets
+config.yaml
+.env
+.env.*
+!.env.template
+!config.template.yaml
+
+# Certificates
+certs/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+bin/
+dist/
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-github-service
 
-# Test binary, built with `go test -c`
+# Test files
 *.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+coverage.txt
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# OS-specific files
+.DS_Store
+Thumbs.db
 
 # Dependency directories (remove the comment below to include it)
 vendor/
@@ -22,18 +48,10 @@ go.work
 *.db
 *.db-journal
 
-# IDE specific files
-.idea
-.vscode
-*.swp
-*.swo
-
 # Environment files
-.env
 .env.local
 
 # OS specific files
-.DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
@@ -43,6 +61,4 @@ Thumbs.db
 
 # Development
 .env
-tmp/
-bin/
 .air.toml

@@ -1,0 +1,32 @@
+# Server configuration
+server:
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+
+# Database configuration
+database:
+  host: ${DB_HOST:-localhost}
+  port: ${DB_PORT:-5432}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+  name: ${DB_NAME:-github_service}
+  sslmode: ${DB_SSLMODE:-disable}
+
+# GitHub configuration
+github:
+  token: ${GITHUB_TOKEN} # Required: GitHub Personal Access Token
+  rate_limit: 1s
+  request_timeout: 30s
+  max_retries: 3
+  retry_backoff: 2s
+
+# Monitor configuration
+monitor:
+  interval: ${MONITOR_INTERVAL:-1h}
+  enabled: true
+
+# Logging configuration
+log:
+  level: ${LOG_LEVEL:-info}
+  format: ${LOG_FORMAT:-json}

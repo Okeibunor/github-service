@@ -10,58 +10,50 @@ import (
 )
 
 type Config struct {
-	Database struct {
-		Host     string
-		Port     int
-		User     string
-		Password string
-		Name     string
-		SSLMode  string
-	}
-	GitHub struct {
-		Token    string
-		Repo     string
-		Since    time.Time
-		Interval time.Duration
-	}
-	Server ServerConfig
+	Database DatabaseConfig
+	GitHub   GitHubConfig
+	Server   ServerConfig
+	Monitor  MonitorConfig
+	Log      LogConfig
+}
+
+type DatabaseConfig struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	Name     string
+	SSLMode  string
+}
+
+type GitHubConfig struct {
+	Token          string
+	RateLimit      time.Duration
+	RequestTimeout time.Duration
+	MaxRetries     int
+	RetryBackoff   time.Duration
+	Repo           string        // Optional: specific repository to monitor
+	Since          time.Time     // Optional: sync commits since this time
+	Interval       time.Duration // Optional: sync interval
 }
 
 type ServerConfig struct {
-	Port int
+	Port         int
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
 }
 
-func NewConfig() *Config {
-	return &Config{
-		Database: struct {
-			Host     string
-			Port     int
-			User     string
-			Password string
-			Name     string
-			SSLMode  string
-		}{
-			Host:     "localhost",
-			Port:     5432,
-			User:     "postgres",
-			Password: "postgres",
-			Name:     "github_service",
-			SSLMode:  "disable",
-		},
-		GitHub: struct {
-			Token    string
-			Repo     string
-			Since    time.Time
-			Interval time.Duration
-		}{
-			Interval: time.Hour,
-		},
-		Server: ServerConfig{
-			Port: 8080,
-		},
-	}
+type MonitorConfig struct {
+	Interval time.Duration
+	Enabled  bool
 }
 
+type LogConfig struct {
+	Level  string
+	Format string
+}
+
+// Load reads configuration from file and environment variables
 func Load(configPath string) (*Config, error) {
 	v := viper.New()
 
@@ -84,6 +76,26 @@ func Load(configPath string) (*Config, error) {
 		}
 	}
 
+	// Override with environment variables
+	envVars := map[string]string{
+		"database.host":     "DB_HOST",
+		"database.port":     "DB_PORT",
+		"database.user":     "DB_USER",
+		"database.password": "DB_PASSWORD",
+		"database.name":     "DB_NAME",
+		"database.sslmode":  "DB_SSLMODE",
+		"github.token":      "GITHUB_TOKEN",
+		"monitor.interval":  "MONITOR_INTERVAL",
+		"log.level":         "LOG_LEVEL",
+		"log.format":        "LOG_FORMAT",
+	}
+
+	for configKey, envVar := range envVars {
+		if value := os.Getenv(envVar); value != "" {
+			v.Set(configKey, value)
+		}
+	}
+
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
@@ -98,24 +110,28 @@ func Load(configPath string) (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
+	// Server defaults
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.read_timeout", "30s")
 	v.SetDefault("server.write_timeout", "30s")
 
-	v.SetDefault("database.driver", "postgres")
-	v.SetDefault("database.url", "github_service.db")
-	v.SetDefault("database.max_open_conns", 25)
-	v.SetDefault("database.max_idle_conns", 5)
-	v.SetDefault("database.conn_max_lifetime", "5m")
+	// Database defaults
+	v.SetDefault("database.host", "localhost")
+	v.SetDefault("database.port", 5432)
+	v.SetDefault("database.name", "github_service")
+	v.SetDefault("database.sslmode", "disable")
 
+	// GitHub defaults
 	v.SetDefault("github.rate_limit", "1s")
 	v.SetDefault("github.request_timeout", "30s")
 	v.SetDefault("github.max_retries", 3)
 	v.SetDefault("github.retry_backoff", "2s")
 
+	// Monitor defaults
 	v.SetDefault("monitor.interval", "1h")
 	v.SetDefault("monitor.enabled", true)
 
+	// Log defaults
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "json")
 }
@@ -152,7 +168,7 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) GetDSN() string {
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s sslrootcert=certs/ca.pem",
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		c.Database.Host,
 		c.Database.Port,
 		c.Database.User,

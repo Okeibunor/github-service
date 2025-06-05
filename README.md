@@ -77,31 +77,70 @@ make run
 
 ## Configuration
 
-### GitHub Token Setup
+The service can be configured using environment variables or a configuration file. For security, sensitive information like database credentials and API tokens should be provided through environment variables.
 
-1. Create a GitHub Personal Access Token with the following permissions:
-   - `repo` (for private repositories)
-   - `public_repo` (for public repositories)
-2. Token can be created at: https://github.com/settings/tokens
-3. Store the token securely and never share it
+### Required Environment Variables
 
-### Configuration Methods
+```bash
+# Database Configuration
+DB_HOST=localhost        # Database host
+DB_PORT=5432            # Database port
+DB_USER=postgres        # Database user
+DB_PASSWORD=<secret>    # Database password
+DB_NAME=github_service  # Database name
+DB_SSLMODE=disable     # Database SSL mode
 
-1. Environment Variables:
+# GitHub Configuration
+GITHUB_TOKEN=<secret>   # GitHub Personal Access Token
 
-   - `GITHUB_SERVICE_GITHUB_TOKEN`: Your GitHub Personal Access Token
-   - `DB_HOST`: PostgreSQL host (default: localhost)
-   - `DB_PORT`: PostgreSQL port (default: 5432)
-   - `DB_USER`: Database user (default: postgres)
-   - `DB_PASSWORD`: Database password
-   - `DB_NAME`: Database name (default: github_service)
+# Optional Environment Variables
+MONITOR_INTERVAL=1h     # Repository sync interval
+LOG_LEVEL=info         # Logging level (debug, info, warn, error)
+LOG_FORMAT=json        # Logging format (json, text)
+```
 
-2. Command Line Arguments:
-   - `-token`: GitHub API token (can also be set via GITHUB_SERVICE_GITHUB_TOKEN environment variable)
-   - `-db`: PostgreSQL connection string
-   - `-repo`: Repository to monitor (format: owner/name)
-   - `-since`: Start date for commits (format: YYYY-MM-DD)
-   - `-interval`: Sync interval (default: 1h)
+### Configuration File
+
+The service also supports configuration through a YAML file. Create a copy of `config.template.yaml` and modify it according to your needs:
+
+```bash
+cp config.template.yaml config.yaml
+```
+
+Note: Environment variables take precedence over values in the configuration file.
+
+### Security Best Practices
+
+1. Never commit sensitive information (passwords, tokens) to version control
+2. Use environment variables for secrets in production
+3. Keep the config.yaml file in .gitignore
+4. Use strong, unique passwords for database access
+5. Create a dedicated GitHub token with minimal required permissions
+
+## Getting Started
+
+1. Copy the configuration template:
+
+   ```bash
+   cp config.template.yaml config.yaml
+   ```
+
+2. Set up your environment variables:
+
+   ```bash
+   export DB_USER=your_db_user
+   export DB_PASSWORD=your_db_password
+   export GITHUB_TOKEN=your_github_token
+   ```
+
+3. Start the service:
+   ```bash
+   go run cmd/server/main.go
+   ```
+
+## API Documentation
+
+The service provides a RESTful API for managing repository synchronization. See the OpenAPI documentation in `docs/api.yaml` for details.
 
 ## API Usage
 
