@@ -1,0 +1,35 @@
+- id: 1
+  repository_id: 1
+  sha: "abc123"
+  message: "Initial commit"
+  author_name: "author1"
+  author_email: "author1@example.com"
+  author_date: "2023-12-01 00:00:00"
+  committer_name: "author1"
+  committer_email: "author1@example.com"
+  commit_date: "2023-12-01 00:00:00"
+  url: "https://github.com/golang/example/commit/abc123"
+
+- id: 2
+  repository_id: 1
+  sha: "def456"
+  message: "Update README"
+  author_name: "author2"
+  author_email: "author2@example.com"
+  author_date: "2023-12-02 00:00:00"
+  committer_name: "author2"
+  committer_email: "author2@example.com"
+  commit_date: "2023-12-02 00:00:00"
+  url: "https://github.com/golang/example/commit/def456"
+
+- id: 3
+  repository_id: 2
+  sha: "ghi789"
+  message: "Add tests"
+  author_name: "author1"
+  author_email: "author1@example.com"
+  author_date: "2023-12-03 00:00:00"
+  committer_name: "author1"
+  committer_email: "author1@example.com"
+  commit_date: "2023-12-03 00:00:00"
+  url: "https://github.com/testowner/test-repo/commit/ghi789"

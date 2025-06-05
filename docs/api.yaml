@@ -1,0 +1,341 @@
+openapi: 3.0.0
+info:
+  title: GitHub Repository Service API
+  description: API for monitoring GitHub repositories, fetching commit data, and providing analytics. The service continuously syncs with GitHub's public APIs to maintain up-to-date repository information in a persistent store.
+  version: 1.0.0
+  contact:
+    name: API Support
+    url: https://github.com/your-repo/github-service
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /:
+    get:
+      summary: Service Health Check
+      description: Basic endpoint to check if the service is running
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  message:
+                    type: string
+                    example: "Service is healthy"
+
+  /health:
+    get:
+      summary: Detailed Health Check
+      description: Detailed health check endpoint
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  message:
+                    type: string
+                    example: "Service is healthy"
+
+  /api/v1/repositories:
+    get:
+      summary: List Repositories
+      description: Get a list of all tracked repositories
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of repositories to return
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          description: Number of repositories to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of repositories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Repository"
+
+  /api/v1/repositories/{owner}/{repo}:
+    parameters:
+      - name: owner
+        in: path
+        required: true
+        schema:
+          type: string
+        description: GitHub repository owner
+      - name: repo
+        in: path
+        required: true
+        schema:
+          type: string
+        description: GitHub repository name
+    put:
+      summary: Add Repository
+      description: Add a new repository to track
+      responses:
+        "200":
+          description: Repository added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Remove Repository
+      description: Stop tracking a repository
+      responses:
+        "200":
+          description: Repository removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Repository not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/repositories/{owner}/{repo}/commits:
+    get:
+      summary: Get Repository Commits
+      description: Get commits for a specific repository
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+          description: GitHub repository owner
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+          description: GitHub repository name
+        - name: limit
+          in: query
+          description: Maximum number of commits to return
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          description: Number of commits to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of commits
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Commit"
+
+  /api/v1/repositories/{owner}/{repo}/sync:
+    post:
+      summary: Sync Repository
+      description: Manually trigger a repository sync
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+          description: GitHub repository owner
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+          description: GitHub repository name
+      responses:
+        "200":
+          description: Repository sync initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/stats/top-authors:
+    get:
+      summary: Get Top Commit Authors
+      description: Get the most active commit authors
+      parameters:
+        - name: limit
+          in: query
+          description: Number of authors to return
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: List of top authors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CommitStats"
+
+components:
+  schemas:
+    Repository:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        github_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        full_name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        url:
+          type: string
+        language:
+          type: string
+          nullable: true
+        forks_count:
+          type: integer
+        stars_count:
+          type: integer
+        open_issues_count:
+          type: integer
+        watchers_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_commit_check:
+          type: string
+          format: date-time
+          nullable: true
+        commits_since:
+          type: string
+          format: date-time
+          nullable: true
+
+    Commit:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        repository_id:
+          type: integer
+          format: int64
+        sha:
+          type: string
+        message:
+          type: string
+        author_name:
+          type: string
+        author_email:
+          type: string
+        author_date:
+          type: string
+          format: date-time
+        committer_name:
+          type: string
+        committer_email:
+          type: string
+        commit_date:
+          type: string
+          format: date-time
+        url:
+          type: string
+
+    CommitStats:
+      type: object
+      properties:
+        author_name:
+          type: string
+        author_email:
+          type: string
+        commit_count:
+          type: integer
+
+    SuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        message:
+          type: string
+        data:
+          type: object
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "error"
+        message:
+          type: string
+        error:
+          type: string

@@ -1,23 +1,34 @@
 # GitHub API Data Fetching and Service
 
-A Go service that monitors GitHub repositories, fetches commit information, and stores it in a SQLite database. The service continuously syncs repository data and provides easy access to commit statistics.
+A Go service that monitors GitHub repositories, fetches commit information, and stores it in a PostgreSQL database. The service continuously syncs repository data and provides easy access to commit statistics through a RESTful API.
 
 ## Features
 
 - Fetches and stores repository metadata
 - Continuously monitors repositories for new commits
-- Stores commit information in a SQLite database
+- Stores commit information in a PostgreSQL database
 - Configurable date range for commit fetching
-- Provides commit statistics and author information
-- Efficient querying of stored data
+- RESTful API for managing repositories and retrieving statistics
+- Detailed commit analytics and author information
+- Swagger/OpenAPI documentation
+- Comprehensive database queries for analytics
 
 ## Requirements
 
 - Go 1.21 or later
 - GitHub Personal Access Token
-- SQLite3
+- PostgreSQL 13 or later
 
-## Installation
+## Documentation
+
+The `/docs` folder contains comprehensive documentation for the service:
+
+- `api.yaml` - OpenAPI/Swagger specification for the REST API endpoints
+- `commit_queries.md` - Documentation for commit-related database operations and analytics
+- `repository_queries.md` - Documentation for repository management database operations
+- `chromium_test.md` - Example implementation using the Chromium repository
+
+## Installation and Setup
 
 1. Clone the repository:
 
@@ -32,65 +43,77 @@ cd github-service
 go mod download
 ```
 
-3. Build the service:
+3. Set up environment:
 
 ```bash
-go build -o github-service ./cmd/github-service
+make setup
 ```
+
+4. Configure your GitHub token:
+
+   - Copy `.env.example` to `.env`
+   - Add your GitHub token to `.env`:
+     ```
+     GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here
+     ```
+   - Or set it directly in your environment:
+     ```bash
+     export GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here
+     ```
+
+5. Run the service:
+
+```bash
+make run
+```
+
+## Security Notes
+
+- Never commit your GitHub token to version control
+- Use environment variables or `.env` file to manage sensitive credentials
+- The `.env` file is automatically ignored by git
+- Regularly rotate your GitHub token for better security
+- Use the minimum required permissions for your GitHub token
 
 ## Configuration
 
-The service requires a GitHub Personal Access Token with the following permissions:
+### GitHub Token Setup
 
-- `repo` (for private repositories)
-- `public_repo` (for public repositories)
+1. Create a GitHub Personal Access Token with the following permissions:
+   - `repo` (for private repositories)
+   - `public_repo` (for public repositories)
+2. Token can be created at: https://github.com/settings/tokens
+3. Store the token securely and never share it
 
-You can create a token at: https://github.com/settings/tokens
+### Configuration Methods
 
-## Usage
+1. Environment Variables:
 
-### Running the Service
+   - `GITHUB_SERVICE_GITHUB_TOKEN`: Your GitHub Personal Access Token
+   - `DB_HOST`: PostgreSQL host (default: localhost)
+   - `DB_PORT`: PostgreSQL port (default: 5432)
+   - `DB_USER`: Database user (default: postgres)
+   - `DB_PASSWORD`: Database password
+   - `DB_NAME`: Database name (default: github_service)
 
-```bash
-# Set your GitHub token
-export GITHUB_TOKEN=your_github_token
+2. Command Line Arguments:
+   - `-token`: GitHub API token (can also be set via GITHUB_SERVICE_GITHUB_TOKEN environment variable)
+   - `-db`: PostgreSQL connection string
+   - `-repo`: Repository to monitor (format: owner/name)
+   - `-since`: Start date for commits (format: YYYY-MM-DD)
+   - `-interval`: Sync interval (default: 1h)
 
-# Run the service (example with chromium repository)
-./github-service -repo chromium/chromium -since 2024-01-01 -interval 1h
-```
+## API Usage
 
-### Command Line Arguments
+The service provides a RESTful API for managing repositories and retrieving data. Full API documentation is available in `/docs/api.yaml`.
 
-- `-token`: GitHub API token (can also be set via GITHUB_TOKEN environment variable)
-- `-db`: Path to SQLite database (default: "github.db")
-- `-repo`: Repository to monitor (format: owner/name)
-- `-since`: Start date for commits (format: YYYY-MM-DD)
-- `-interval`: Sync interval (default: 1h)
+### Key Endpoints
 
-### Example Queries
-
-The service stores data in a SQLite database, which you can query directly:
-
-1. Get top 10 commit authors:
-
-```sql
-SELECT author_name, author_email, COUNT(*) as commit_count
-FROM commits
-GROUP BY author_name, author_email
-ORDER BY commit_count DESC
-LIMIT 10;
-```
-
-2. Get commits for a specific repository:
-
-```sql
-SELECT c.*
-FROM commits c
-JOIN repositories r ON c.repository_id = r.id
-WHERE r.full_name = 'owner/repo'
-ORDER BY c.commit_date DESC
-LIMIT 100;
-```
+- `GET /api/v1/repositories` - List all tracked repositories
+- `PUT /api/v1/repositories/{owner}/{repo}` - Add a repository to track
+- `DELETE /api/v1/repositories/{owner}/{repo}` - Remove a repository
+- `GET /api/v1/repositories/{owner}/{repo}/commits` - Get repository commits
+- `POST /api/v1/repositories/{owner}/{repo}/sync` - Trigger manual sync
 
 ## Database Schema
 
@@ -138,42 +161,3 @@ CREATE TABLE commits (
     UNIQUE(repository_id, sha)
 );
 ```
-
-## Testing
-
-Run the tests:
-
-```bash
-go test -v ./...
-```
-
-Note: Some tests require a GitHub token to be set in the environment.
-
-## Error Handling
-
-The service implements comprehensive error handling:
-
-- Graceful handling of API rate limits
-- Automatic retry on transient errors
-- Duplicate commit detection
-- Database constraint violation handling
-
-## Performance Considerations
-
-- Uses efficient database indexes
-- Implements pagination for large result sets
-- Caches repository metadata
-- Avoids duplicate commit fetching
-- Uses batch operations where possible
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
