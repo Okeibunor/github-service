@@ -53,8 +53,19 @@ CREATE TABLE IF NOT EXISTS commits (
 	UNIQUE(repository_id, sha)
 );
 
+CREATE TABLE IF NOT EXISTS monitored_repositories (
+	id SERIAL PRIMARY KEY,
+	full_name TEXT NOT NULL UNIQUE,
+	last_sync_time TIMESTAMP WITH TIME ZONE,
+	sync_interval TEXT NOT NULL,
+	is_active BOOLEAN DEFAULT true,
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_commits_repository_date ON commits(repository_id, commit_date DESC);
 CREATE INDEX IF NOT EXISTS idx_commits_author ON commits(author_name, author_email);
+CREATE INDEX IF NOT EXISTS idx_monitored_repositories_active ON monitored_repositories(is_active);
 `
 
 // New creates a new database connection
@@ -327,4 +338,97 @@ func (d *DB) DeleteRepository(ctx context.Context, repoID int64) error {
 // NewFromDB creates a new DB instance from an existing *sql.DB
 func NewFromDB(db *sql.DB) *DB {
 	return &DB{db: db}
+}
+
+// MonitoredRepository represents a repository being monitored
+type MonitoredRepository struct {
+	ID           int64
+	FullName     string
+	LastSyncTime time.Time
+	SyncInterval time.Duration
+	IsActive     bool
+}
+
+// AddMonitoredRepository adds a repository to the monitoring list
+func (d *DB) AddMonitoredRepository(ctx context.Context, fullName string, syncInterval time.Duration) error {
+	query := `
+		INSERT INTO monitored_repositories (full_name, last_sync_time, sync_interval, is_active)
+		VALUES ($1, $2, $3, true)
+		ON CONFLICT (full_name) 
+		DO UPDATE SET sync_interval = $3, is_active = true, updated_at = CURRENT_TIMESTAMP
+	`
+	_, err := d.db.ExecContext(ctx, query, fullName, time.Now().UTC(), syncInterval.String())
+	return err
+}
+
+// GetMonitoredRepositories returns all actively monitored repositories
+func (d *DB) GetMonitoredRepositories(ctx context.Context) ([]models.MonitoredRepository, error) {
+	query := `
+		SELECT id, full_name, last_sync_time, sync_interval, is_active
+		FROM monitored_repositories
+		WHERE is_active = true
+	`
+	rows, err := d.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var repos []models.MonitoredRepository
+	for rows.Next() {
+		var repo models.MonitoredRepository
+		var intervalStr string
+		err := rows.Scan(&repo.ID, &repo.FullName, &repo.LastSyncTime, &intervalStr, &repo.IsActive)
+		if err != nil {
+			return nil, err
+		}
+		repo.SyncInterval, err = time.ParseDuration(intervalStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid sync interval for %s: %w", repo.FullName, err)
+		}
+		repos = append(repos, repo)
+	}
+	return repos, rows.Err()
+}
+
+// UpdateMonitoredRepositorySync updates the last sync time for a monitored repository
+func (d *DB) UpdateMonitoredRepositorySync(ctx context.Context, fullName string, lastSyncTime time.Time) error {
+	query := `
+		UPDATE monitored_repositories
+		SET last_sync_time = $2, updated_at = CURRENT_TIMESTAMP
+		WHERE full_name = $1
+	`
+	result, err := d.db.ExecContext(ctx, query, fullName, lastSyncTime)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("monitored repository not found: %s", fullName)
+	}
+	return nil
+}
+
+// RemoveMonitoredRepository marks a repository as inactive
+func (d *DB) RemoveMonitoredRepository(ctx context.Context, fullName string) error {
+	query := `
+		UPDATE monitored_repositories
+		SET is_active = false, updated_at = CURRENT_TIMESTAMP
+		WHERE full_name = $1
+	`
+	result, err := d.db.ExecContext(ctx, query, fullName)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("monitored repository not found: %s", fullName)
+	}
+	return nil
 }

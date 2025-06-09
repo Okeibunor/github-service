@@ -14,6 +14,7 @@ import (
 	"github-service/internal/app"
 	"github-service/internal/config"
 	"github-service/internal/database"
+	"github-service/internal/github"
 	"github-service/internal/service"
 	"github-service/internal/worker"
 
@@ -44,14 +45,11 @@ func main() {
 	}
 	defer db.Close()
 
+	// Create GitHub client
+	githubClient := github.NewClient(cfg.GitHub.Token)
+
 	// Create service
-	svc, err := service.New(service.Config{
-		GitHubToken: cfg.GitHub.Token,
-		DB:          db,
-	})
-	if err != nil {
-		log.Fatalf("Error creating service: %v", err)
-	}
+	svc := service.New(githubClient, db, &logger)
 
 	// Create and start sync worker
 	syncWorker := worker.NewSyncWorker(

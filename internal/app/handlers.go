@@ -79,7 +79,7 @@ func (a *App) getTopAuthors(w http.ResponseWriter, r *http.Request) {
 
 	if repoFullName != "" {
 		// First check if the repository is being monitored
-		if !a.worker.IsRepositoryMonitored(repoFullName) {
+		if !a.worker.IsRepositoryMonitored(r.Context(), repoFullName) {
 			response.JSON(w, http.StatusNotFound, response.Error(fmt.Sprintf("Repository %s is not being monitored", repoFullName)))
 			return
 		}
@@ -131,7 +131,12 @@ func (a *App) getTopAuthors(w http.ResponseWriter, r *http.Request) {
 func (a *App) listRepositories(w http.ResponseWriter, r *http.Request) {
 	a.log.Debug().Msg("Listing repositories")
 
-	repos := a.worker.ListRepositories()
+	repos, err := a.worker.ListRepositories(r.Context())
+	if err != nil {
+		a.log.Error().Err(err).Msg("Failed to list repositories")
+		response.JSON(w, http.StatusInternalServerError, response.Error("Failed to list repositories"))
+		return
+	}
 
 	a.log.Info().
 		Int("repository_count", len(repos)).
@@ -171,7 +176,7 @@ func (a *App) addRepository(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add to worker which will handle the initial sync
-	if err := a.worker.AddRepository(owner, repo); err != nil {
+	if err := a.worker.AddRepository(r.Context(), owner, repo); err != nil {
 		a.log.Error().
 			Err(err).
 			Str("owner", owner).
@@ -207,7 +212,7 @@ func (a *App) removeRepository(w http.ResponseWriter, r *http.Request) {
 		Msg("Removing repository")
 
 	// First remove from worker's monitoring list
-	a.worker.RemoveRepository(owner, repo)
+	a.worker.RemoveRepository(r.Context(), owner, repo)
 
 	// Then remove from database
 	dbRepo, err := a.service.GetRepositoryByName(r.Context(), fullName)
@@ -268,7 +273,7 @@ func (a *App) resyncRepository(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// First verify the repository is being monitored
-	if !a.worker.IsRepositoryMonitored(owner + "/" + repo) {
+	if !a.worker.IsRepositoryMonitored(r.Context(), owner+"/"+repo) {
 		response.JSON(w, http.StatusNotFound, response.Error(fmt.Sprintf("Repository %s is not being monitored", fullName)))
 		return
 	}
@@ -286,7 +291,7 @@ func (a *App) resyncRepository(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update worker's sync time after successful sync
-	a.worker.ResetRepository(owner, repo, since)
+	a.worker.ResetRepository(r.Context(), owner, repo, since)
 
 	a.log.Info().
 		Str("owner", owner).

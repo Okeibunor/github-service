@@ -21,22 +21,20 @@ func SeedChromiumData(ctx context.Context, db *database.DB, githubToken string) 
 	}
 
 	// Store repository data
-	description := repo.Description
-	language := repo.Language
 	dbRepo := &models.Repository{
 		GitHubID:        repo.ID,
 		Name:            repo.Name,
 		FullName:        repo.FullName,
-		Description:     &description,
+		Description:     repo.Description,
 		URL:             repo.URL,
-		Language:        &language,
+		Language:        repo.Language,
 		ForksCount:      repo.ForksCount,
-		StarsCount:      repo.StargazersCount,
+		StarsCount:      repo.StarsCount,
 		OpenIssuesCount: repo.OpenIssuesCount,
 		WatchersCount:   repo.WatchersCount,
 		CreatedAt:       repo.CreatedAt,
 		UpdatedAt:       repo.UpdatedAt,
-		CommitsSince:    &time.Time{},
+		CommitsSince:    time.Time{},
 	}
 
 	if err := db.CreateRepository(ctx, dbRepo); err != nil {

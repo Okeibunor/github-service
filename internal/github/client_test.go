@@ -75,8 +75,8 @@ func TestGetRepository(t *testing.T) {
 		if repo.ForksCount != 10 {
 			t.Errorf("Expected forks count 10, got %d", repo.ForksCount)
 		}
-		if repo.StargazersCount != 20 {
-			t.Errorf("Expected stars count 20, got %d", repo.StargazersCount)
+		if repo.StarsCount != 20 {
+			t.Errorf("Expected stars count 20, got %d", repo.StarsCount)
 		}
 	})
 

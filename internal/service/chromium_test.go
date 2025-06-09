@@ -95,7 +95,7 @@ func TestChromiumRepositoryAnalysis(t *testing.T) {
 
 		// Print repository statistics
 		t.Logf("Repository: %s", repo.FullName)
-		t.Logf("Description: %s", *repo.Description)
+		t.Logf("Description: %s", repo.Description)
 		t.Logf("Stars: %d, Forks: %d, Watchers: %d",
 			repo.StarsCount, repo.ForksCount, repo.WatchersCount)
 		t.Logf("\nTop contributors in the last 7 days:")

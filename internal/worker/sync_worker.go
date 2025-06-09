@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github-service/internal/service"
@@ -16,8 +15,6 @@ type SyncWorker struct {
 	service      *service.Service
 	syncInterval time.Duration
 	defaultAge   time.Duration
-	repos        map[string]string // map[owner/repo]lastSyncTime
-	mu           sync.RWMutex
 	stop         chan struct{}
 }
 
@@ -30,33 +27,33 @@ func NewSyncWorker(service *service.Service, syncInterval, defaultAge time.Durat
 		service:      service,
 		syncInterval: syncInterval,
 		defaultAge:   defaultAge,
-		repos:        make(map[string]string),
 		stop:         make(chan struct{}),
 	}
 }
 
 // AddRepository adds a repository to be monitored
-func (w *SyncWorker) AddRepository(owner, name string) error {
-	w.mu.Lock()
+func (w *SyncWorker) AddRepository(ctx context.Context, owner, name string) error {
 	fullName := owner + "/" + name
-	w.repos[fullName] = ""
-	w.mu.Unlock()
+
+	// Add to database first
+	if err := w.service.DB().AddMonitoredRepository(ctx, fullName, w.syncInterval); err != nil {
+		return fmt.Errorf("failed to add repository to monitoring: %w", err)
+	}
 
 	// Perform initial sync
 	since := time.Now().Add(-w.defaultAge)
-	err := w.service.SyncRepository(context.Background(), owner, name, since)
-	if err != nil {
-		// If sync fails, remove from monitoring
-		w.mu.Lock()
-		delete(w.repos, fullName)
-		w.mu.Unlock()
+	if err := w.service.SyncRepository(ctx, owner, name, since); err != nil {
+		// If sync fails, mark repository as inactive
+		if removeErr := w.service.DB().RemoveMonitoredRepository(ctx, fullName); removeErr != nil {
+			log.Printf("Failed to remove repository after sync failure: %v", removeErr)
+		}
 		return fmt.Errorf("initial sync failed: %w", err)
 	}
 
 	// Update last sync time
-	w.mu.Lock()
-	w.repos[fullName] = time.Now().UTC().Format(time.RFC3339)
-	w.mu.Unlock()
+	if err := w.service.DB().UpdateMonitoredRepositorySync(ctx, fullName, time.Now().UTC()); err != nil {
+		log.Printf("Failed to update last sync time: %v", err)
+	}
 
 	return nil
 }
@@ -88,41 +85,38 @@ func (w *SyncWorker) Stop() {
 
 // syncAll synchronizes all monitored repositories
 func (w *SyncWorker) syncAll(ctx context.Context) {
-	w.mu.RLock()
-	repos := make(map[string]string, len(w.repos))
-	for k, v := range w.repos {
-		repos[k] = v
+	repos, err := w.service.DB().GetMonitoredRepositories(ctx)
+	if err != nil {
+		log.Printf("Error fetching monitored repositories: %v", err)
+		return
 	}
-	w.mu.RUnlock()
 
-	for fullName := range repos {
-		owner, name := splitRepoName(fullName)
+	for _, repo := range repos {
+		owner, name := splitRepoName(repo.FullName)
 		if owner == "" || name == "" {
-			log.Printf("Invalid repository name format: %s", fullName)
+			log.Printf("Invalid repository name format: %s", repo.FullName)
 			continue
 		}
-
-		since := w.getSyncTime(fullName)
 
 		// Implement retry logic with exponential backoff
 		maxRetries := 3
 		for attempt := 1; attempt <= maxRetries; attempt++ {
-			err := w.service.SyncRepository(ctx, owner, name, since)
+			err := w.service.SyncRepository(ctx, owner, name, repo.LastSyncTime)
 			if err == nil {
-				w.mu.Lock()
-				w.repos[fullName] = time.Now().UTC().Format(time.RFC3339)
-				w.mu.Unlock()
+				if updateErr := w.service.DB().UpdateMonitoredRepositorySync(ctx, repo.FullName, time.Now().UTC()); updateErr != nil {
+					log.Printf("Failed to update last sync time for %s: %v", repo.FullName, updateErr)
+				}
 				break
 			}
 
 			if attempt == maxRetries {
-				log.Printf("Error syncing repository %s after %d attempts: %v", fullName, maxRetries, err)
+				log.Printf("Error syncing repository %s after %d attempts: %v", repo.FullName, maxRetries, err)
 				continue
 			}
 
 			// Exponential backoff
 			backoffDuration := time.Duration(attempt*attempt) * time.Second
-			log.Printf("Retry attempt %d for repository %s after %v: %v", attempt, fullName, backoffDuration, err)
+			log.Printf("Retry attempt %d for repository %s after %v: %v", attempt, repo.FullName, backoffDuration, err)
 			select {
 			case <-time.After(backoffDuration):
 				continue
@@ -131,23 +125,6 @@ func (w *SyncWorker) syncAll(ctx context.Context) {
 			}
 		}
 	}
-}
-
-// getSyncTime returns the time since which to sync commits
-func (w *SyncWorker) getSyncTime(fullName string) time.Time {
-	w.mu.RLock()
-	lastSync := w.repos[fullName]
-	w.mu.RUnlock()
-
-	if lastSync == "" {
-		return time.Now().Add(-w.defaultAge)
-	}
-
-	t, err := time.Parse(time.RFC3339, lastSync)
-	if err != nil {
-		return time.Now().Add(-w.defaultAge)
-	}
-	return t
 }
 
 // splitRepoName splits a full repository name into owner and repository parts
@@ -160,34 +137,41 @@ func splitRepoName(fullName string) (owner, name string) {
 }
 
 // IsRepositoryMonitored checks if a repository is being monitored
-func (w *SyncWorker) IsRepositoryMonitored(fullName string) bool {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	_, exists := w.repos[fullName]
-	return exists
+func (w *SyncWorker) IsRepositoryMonitored(ctx context.Context, fullName string) bool {
+	repos, err := w.service.DB().GetMonitoredRepositories(ctx)
+	if err != nil {
+		log.Printf("Error checking monitored status: %v", err)
+		return false
+	}
+	for _, repo := range repos {
+		if repo.FullName == fullName {
+			return true
+		}
+	}
+	return false
 }
 
 // ResetRepository resets the sync time for a repository
-func (w *SyncWorker) ResetRepository(owner, name string, since time.Time) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.repos[owner+"/"+name] = since.UTC().Format(time.RFC3339)
+func (w *SyncWorker) ResetRepository(ctx context.Context, owner, name string, since time.Time) error {
+	fullName := owner + "/" + name
+	return w.service.DB().UpdateMonitoredRepositorySync(ctx, fullName, since)
 }
 
 // RemoveRepository removes a repository from monitoring
-func (w *SyncWorker) RemoveRepository(owner, name string) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	delete(w.repos, owner+"/"+name)
+func (w *SyncWorker) RemoveRepository(ctx context.Context, owner, name string) error {
+	fullName := owner + "/" + name
+	return w.service.DB().RemoveMonitoredRepository(ctx, fullName)
 }
 
 // ListRepositories returns all monitored repositories
-func (w *SyncWorker) ListRepositories() []string {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	repos := make([]string, 0, len(w.repos))
-	for repo := range w.repos {
-		repos = append(repos, repo)
+func (w *SyncWorker) ListRepositories(ctx context.Context) ([]string, error) {
+	repos, err := w.service.DB().GetMonitoredRepositories(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return repos
+	names := make([]string, len(repos))
+	for i, repo := range repos {
+		names[i] = repo.FullName
+	}
+	return names, nil
 }

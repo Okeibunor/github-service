@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github-service/internal/models"
 	"net/http"
 	"strconv"
 	"sync"
@@ -86,11 +87,15 @@ type CommitResponse struct {
 	HTMLURL string `json:"html_url"`
 }
 
-// GetRateLimitInfo returns current rate limit information
-func (c *Client) GetRateLimitInfo() RateLimitInfo {
+// GetRateLimitInfo returns the current rate limit information
+func (c *Client) GetRateLimitInfo() models.RateLimitInfo {
 	c.rateLimitMu.RLock()
 	defer c.rateLimitMu.RUnlock()
-	return c.rateLimit
+	return models.RateLimitInfo{
+		Remaining: c.rateLimit.Remaining,
+		Reset:     c.rateLimit.Reset,
+		Limit:     c.rateLimit.Limit,
+	}
 }
 
 // updateRateLimit updates rate limit information from response headers
@@ -157,7 +162,7 @@ func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
 }
 
 // GetRepository fetches repository information from GitHub
-func (c *Client) GetRepository(ctx context.Context, owner, repo string) (*Repository, error) {
+func (c *Client) GetRepository(ctx context.Context, owner, repo string) (*models.Repository, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s", baseURL, owner, repo)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -180,34 +185,88 @@ func (c *Client) GetRepository(ctx context.Context, owner, repo string) (*Reposi
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
 
-	return &repository, nil
+	// Convert to models.Repository
+	return &models.Repository{
+		GitHubID:        repository.ID,
+		Name:            repository.Name,
+		FullName:        repository.FullName,
+		Description:     repository.Description,
+		URL:             repository.URL,
+		Language:        repository.Language,
+		ForksCount:      repository.ForksCount,
+		StarsCount:      repository.StargazersCount,
+		OpenIssuesCount: repository.OpenIssuesCount,
+		WatchersCount:   repository.WatchersCount,
+		CreatedAt:       repository.CreatedAt,
+		UpdatedAt:       repository.UpdatedAt,
+	}, nil
 }
 
 // GetCommits fetches commits from GitHub since a specific time
-func (c *Client) GetCommits(ctx context.Context, owner, repo string, since time.Time) ([]CommitResponse, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/commits?since=%s", baseURL, owner, repo, since.Format(time.RFC3339))
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+func (c *Client) GetCommits(ctx context.Context, owner, repo string, since time.Time) ([]models.CommitResponse, error) {
+	var allCommits []models.CommitResponse
+	page := 1
+	perPage := 100 // GitHub's maximum per page
+
+	for {
+		url := fmt.Sprintf("%s/repos/%s/%s/commits?since=%s&page=%d&per_page=%d",
+			baseURL, owner, repo, since.Format(time.RFC3339), page, perPage)
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("creating request: %w", err)
+		}
+
+		c.setHeaders(req)
+		resp, err := c.doRequest(req)
+		if err != nil {
+			return nil, fmt.Errorf("executing request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+
+		var pageCommits []CommitResponse
+		if err := json.NewDecoder(resp.Body).Decode(&pageCommits); err != nil {
+			return nil, fmt.Errorf("decoding response: %w", err)
+		}
+
+		// Convert to models.CommitResponse
+		for _, commit := range pageCommits {
+			modelCommit := models.CommitResponse{
+				SHA:     commit.SHA,
+				HTMLURL: commit.HTMLURL,
+			}
+			modelCommit.Commit.Message = commit.Commit.Message
+			modelCommit.Commit.Author = models.CommitAuthor{
+				Name:  commit.Commit.Author.Name,
+				Email: commit.Commit.Author.Email,
+				Date:  commit.Commit.Author.Date,
+			}
+			modelCommit.Commit.Committer = models.CommitAuthor{
+				Name:  commit.Commit.Committer.Name,
+				Email: commit.Commit.Committer.Email,
+				Date:  commit.Commit.Committer.Date,
+			}
+			allCommits = append(allCommits, modelCommit)
+		}
+
+		// Check if we've reached the last page
+		if len(pageCommits) < perPage {
+			break
+		}
+
+		// Check for rate limiting before proceeding to next page
+		if err := c.checkRateLimit(ctx); err != nil {
+			return nil, fmt.Errorf("rate limit check for next page: %w", err)
+		}
+
+		page++
 	}
 
-	c.setHeaders(req)
-	resp, err := c.doRequest(req)
-	if err != nil {
-		return nil, fmt.Errorf("executing request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var commits []CommitResponse
-	if err := json.NewDecoder(resp.Body).Decode(&commits); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
-	}
-
-	return commits, nil
+	return allCommits, nil
 }
 
 // setHeaders sets the required headers for GitHub API requests

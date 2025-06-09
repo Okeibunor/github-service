@@ -73,19 +73,19 @@ type MockGitHubClient struct {
 	getCommitsErr error
 }
 
-func (m *MockGitHubClient) GetRepository(ctx context.Context, owner, name string) (*github.Repository, error) {
+func (m *MockGitHubClient) GetRepository(ctx context.Context, owner, name string) (*models.Repository, error) {
 	if m.getRepoErr != nil {
 		return nil, m.getRepoErr
 	}
-	return &github.Repository{
-		ID:              1,
+	return &models.Repository{
+		GitHubID:        1,
 		Name:            name,
 		FullName:        owner + "/" + name,
 		Description:     "Test repo",
 		URL:             "https://github.com/" + owner + "/" + name,
 		Language:        "Go",
 		ForksCount:      0,
-		StargazersCount: 0,
+		StarsCount:      0,
 		OpenIssuesCount: 0,
 		WatchersCount:   0,
 		CreatedAt:       time.Now().Add(-24 * time.Hour),
@@ -93,28 +93,32 @@ func (m *MockGitHubClient) GetRepository(ctx context.Context, owner, name string
 	}, nil
 }
 
-func (m *MockGitHubClient) GetCommits(ctx context.Context, owner, name string, since time.Time) ([]github.CommitResponse, error) {
+func (m *MockGitHubClient) GetCommits(ctx context.Context, owner, name string, since time.Time) ([]models.CommitResponse, error) {
 	if m.getCommitsErr != nil {
 		return nil, m.getCommitsErr
 	}
 
-	commit := github.CommitResponse{
+	commit := models.CommitResponse{
 		SHA:     "abc123",
 		HTMLURL: "https://github.com/test/test/commit/abc123",
 	}
 	commit.Commit.Message = "Test commit"
-	commit.Commit.Author.Name = "Test Author"
-	commit.Commit.Author.Email = "test@example.com"
-	commit.Commit.Author.Date = time.Now()
-	commit.Commit.Committer.Name = "Test Committer"
-	commit.Commit.Committer.Email = "test@example.com"
-	commit.Commit.Committer.Date = time.Now()
+	commit.Commit.Author = models.CommitAuthor{
+		Name:  "Test Author",
+		Email: "test@example.com",
+		Date:  time.Now(),
+	}
+	commit.Commit.Committer = models.CommitAuthor{
+		Name:  "Test Committer",
+		Email: "test@example.com",
+		Date:  time.Now(),
+	}
 
-	return []github.CommitResponse{commit}, nil
+	return []models.CommitResponse{commit}, nil
 }
 
-func (m *MockGitHubClient) GetRateLimitInfo() github.RateLimitInfo {
-	return github.RateLimitInfo{
+func (m *MockGitHubClient) GetRateLimitInfo() models.RateLimitInfo {
+	return models.RateLimitInfo{
 		Remaining: 1000,
 		Limit:     5000,
 		Reset:     time.Now().Add(time.Hour),
