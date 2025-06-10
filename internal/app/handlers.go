@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github-service/internal/queue"
 
@@ -137,20 +138,37 @@ func (a *App) getTopAuthors(w http.ResponseWriter, r *http.Request) {
 func (a *App) listRepositories(w http.ResponseWriter, r *http.Request) {
 	a.log.Debug().Msg("Listing repositories")
 
-	repos, err := a.worker.ListRepositories(r.Context())
+	// Get monitored repositories
+	monitoredRepos, err := a.service.DB().GetMonitoredRepositories(r.Context())
 	if err != nil {
 		a.log.Error().Err(err).Msg("Failed to list repositories")
 		response.JSON(w, http.StatusInternalServerError, response.Error("Failed to list repositories"))
 		return
 	}
 
+	// Get full repository details for each monitored repository
+	var repositories []*models.Repository
+	for _, monitoredRepo := range monitoredRepos {
+		repo, err := a.service.GetRepositoryByName(r.Context(), monitoredRepo.FullName)
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("repository", monitoredRepo.FullName).
+				Msg("Failed to get repository details")
+			continue
+		}
+		if repo != nil {
+			repositories = append(repositories, repo)
+		}
+	}
+
 	a.log.Info().
-		Int("repository_count", len(repos)).
+		Int("repository_count", len(repositories)).
 		Msg("Successfully listed repositories")
 
 	response.JSON(w, http.StatusOK, response.Success("Repositories retrieved successfully", map[string]interface{}{
-		"repositories": repos,
-		"count":        len(repos),
+		"count":        len(repositories),
+		"repositories": repositories,
 	}))
 }
 
@@ -187,7 +205,29 @@ func (a *App) addRepository(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a sync job
+	// Get repository information from GitHub and sync it to our database
+	if err := a.service.SyncRepository(r.Context(), owner, repo, time.Now().AddDate(0, 0, -7)); err != nil {
+		a.log.Error().
+			Err(err).
+			Str("owner", owner).
+			Str("repo", repo).
+			Msg("Failed to sync repository")
+		response.JSON(w, http.StatusInternalServerError, response.Error(fmt.Sprintf("Failed to sync repository: %v", err)))
+		return
+	}
+
+	// Add to monitoring list
+	if err := a.worker.AddRepository(r.Context(), owner, repo); err != nil {
+		a.log.Error().
+			Err(err).
+			Str("owner", owner).
+			Str("repo", repo).
+			Msg("Failed to add repository to monitoring")
+		response.JSON(w, http.StatusInternalServerError, response.Error(fmt.Sprintf("Failed to add repository to monitoring: %v", err)))
+		return
+	}
+
+	// Create a sync job for full history
 	payload := queue.SyncPayload{
 		Owner: owner,
 		Repo:  repo,

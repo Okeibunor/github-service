@@ -25,6 +25,8 @@ docker-compose up --build
 
 The service will be available at `http://localhost:8080`. The PostgreSQL database will be accessible at `localhost:5432`.
 
+To test with the Chromium repository: `./scripts/test-chromium.sh`
+
 ## Features
 
 - Fetches and stores repository metadata
@@ -95,7 +97,6 @@ The `/docs` folder contains comprehensive documentation:
 - `api.yaml` - OpenAPI/Swagger specification
 - `commit_queries.md` - Commit-related database operations
 - `repository_queries.md` - Repository management operations
-- `chromium_test.md` - Example implementation using the Chromium repository
 
 ## Configuration
 
