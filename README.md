@@ -11,16 +11,22 @@ git clone https://github.com/okeibunor/github-service.git
 cd github-service
 ```
 
-2. Set up your GitHub token:
+2. Copy the Docker configuration file:
+
+```bash
+cp config.docker.yaml config.yaml
+```
+
+3. Set up your GitHub token:
 
 ```bash
 export GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here
 ```
 
-3. Start the service using Docker Compose:
+4. Start the service using Docker Compose:
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 The service will be available at `http://localhost:8080`. The PostgreSQL database will be accessible at `localhost:5432`.
