@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+bin/
+github-service
+*.db
+*.db-journal
+
+# Development files
+.env
+.env.example
+tmp/
+.air.toml
+
+# Documentation
+docs/
+*.md
+
+# Test files
+test/
+*_test.go
+
+# Certificates
+certs/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo 

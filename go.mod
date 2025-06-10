@@ -7,6 +7,7 @@ toolchain go1.23.1
 require (
 	github.com/go-testfixtures/testfixtures/v3 v3.16.0
 	github.com/golang-migrate/migrate/v4 v4.16.2
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
 	github.com/rs/zerolog v1.31.0
@@ -37,7 +38,6 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/goccy/go-yaml v1.17.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect

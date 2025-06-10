@@ -1,0 +1,33 @@
+# Server configuration
+server:
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+
+# Database configuration
+database:
+  host: "db" # This matches the service name in docker-compose
+  port: 5432
+  user: "github_service"
+  password: "github_service_password"
+  name: "github_service_db"
+  sslmode: "disable" # No SSL for local development
+
+# GitHub configuration
+github:
+  token: "" # Will be set via environment variable
+  rate_limit: "1s"
+  request_timeout: "30s"
+  max_retries: 3
+  retry_backoff: "2s"
+  interval: "1h"
+
+# Monitor configuration
+monitor:
+  interval: "1h"
+  enabled: true
+
+# Logging configuration
+log:
+  level: "debug"
+  format: "json"

@@ -12,7 +12,7 @@ servers:
     description: Local development server
 
 paths:
-  /:
+  /health:
     get:
       summary: Service Health Check
       description: Basic endpoint to check if the service is running
@@ -26,49 +26,21 @@ paths:
                 properties:
                   status:
                     type: string
-                    example: "ok"
+                    example: "success"
                   message:
                     type: string
                     example: "Service is healthy"
-
-  /health:
-    get:
-      summary: Detailed Health Check
-      description: Detailed health check endpoint
-      responses:
-        "200":
-          description: Service is healthy
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: "ok"
-                  message:
-                    type: string
-                    example: "Service is healthy"
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: "ok"
 
   /api/v1/repositories:
     get:
       summary: List Repositories
-      description: Get a list of all tracked repositories
-      parameters:
-        - name: limit
-          in: query
-          description: Maximum number of repositories to return
-          required: false
-          schema:
-            type: integer
-            default: 10
-        - name: offset
-          in: query
-          description: Number of repositories to skip
-          required: false
-          schema:
-            type: integer
-            default: 0
+      description: Get a list of all monitored repositories with their details
       responses:
         "200":
           description: List of repositories
@@ -80,10 +52,19 @@ paths:
                   status:
                     type: string
                     example: "success"
+                  message:
+                    type: string
+                    example: "Repositories retrieved successfully"
                   data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Repository"
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                        description: Total number of repositories
+                      repositories:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Repository"
 
   /api/v1/repositories/{owner}/{repo}:
     parameters:
@@ -101,41 +82,74 @@ paths:
         description: GitHub repository name
     put:
       summary: Add Repository
-      description: Add a new repository to track
+      description: Add a new repository to monitor and schedule initial sync
       responses:
-        "200":
-          description: Repository added successfully
+        "202":
+          description: Repository scheduled for synchronization
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        "400":
-          description: Invalid request
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "Repository owner/repo scheduled for synchronization"
+                  data:
+                    type: object
+                    properties:
+                      job_id:
+                        type: string
+                      status:
+                        type: string
+                        example: "scheduled"
+                      owner:
+                        type: string
+                      repo:
+                        type: string
+        "404":
+          description: Repository not found on GitHub
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: GitHub API rate limit exceeded
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
     delete:
       summary: Remove Repository
-      description: Stop tracking a repository
+      description: Stop tracking a repository and remove its data
       responses:
         "200":
           description: Repository removed successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        "404":
-          description: Repository not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "Repository owner/repo removed successfully"
+                  data:
+                    type: object
+                    properties:
+                      owner:
+                        type: string
+                      repo:
+                        type: string
 
   /api/v1/repositories/{owner}/{repo}/commits:
     get:
       summary: Get Repository Commits
-      description: Get commits for a specific repository
+      description: Get paginated commits for a specific repository
       parameters:
         - name: owner
           in: path
@@ -149,20 +163,22 @@ paths:
           schema:
             type: string
           description: GitHub repository name
-        - name: limit
+        - name: page
           in: query
-          description: Maximum number of commits to return
+          description: Page number (1-based)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: per_page
+          in: query
+          description: Number of items per page
           required: false
           schema:
             type: integer
             default: 10
-        - name: offset
-          in: query
-          description: Number of commits to skip
-          required: false
-          schema:
-            type: integer
-            default: 0
+            minimum: 1
       responses:
         "200":
           description: List of commits
@@ -174,15 +190,27 @@ paths:
                   status:
                     type: string
                     example: "success"
+                  message:
+                    type: string
+                    example: "Commits retrieved successfully"
                   data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Commit"
+                    type: object
+                    properties:
+                      commits:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Commit"
+                      page:
+                        type: integer
+                      per_page:
+                        type: integer
+                      total_items:
+                        type: integer
 
-  /api/v1/repositories/{owner}/{repo}/sync:
+  /api/v1/repositories/{owner}/{repo}/resync:
     post:
-      summary: Sync Repository
-      description: Manually trigger a repository sync
+      summary: Resync Repository
+      description: Manually trigger a repository resynchronization
       parameters:
         - name: owner
           in: path
@@ -197,17 +225,42 @@ paths:
             type: string
           description: GitHub repository name
       responses:
-        "200":
-          description: Repository sync initiated
+        "202":
+          description: Repository resync scheduled
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "Repository owner/repo scheduled for resynchronization"
+                  data:
+                    type: object
+                    properties:
+                      job_id:
+                        type: string
+                      status:
+                        type: string
+                        example: "scheduled"
+                      owner:
+                        type: string
+                      repo:
+                        type: string
+        "404":
+          description: Repository not being monitored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/stats/top-authors:
     get:
       summary: Get Top Commit Authors
-      description: Get the most active commit authors
+      description: Get the most active commit authors globally or for a specific repository
       parameters:
         - name: limit
           in: query
@@ -216,6 +269,13 @@ paths:
           schema:
             type: integer
             default: 10
+            minimum: 1
+        - name: repository
+          in: query
+          description: Full repository name (owner/repo) to get stats for
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: List of top authors
@@ -227,10 +287,95 @@ paths:
                   status:
                     type: string
                     example: "success"
+                  message:
+                    type: string
+                    example: "Top authors retrieved successfully"
                   data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/CommitStats"
+                    type: object
+                    properties:
+                      authors:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CommitStats"
+                      n:
+                        type: integer
+                        description: Number of authors returned
+                      repository:
+                        type: string
+                        description: Repository name if specified, empty for global stats
+        "404":
+          description: Repository not found or not being monitored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/jobs:
+    get:
+      summary: List Jobs
+      description: Get a list of all jobs in the queue
+      responses:
+        "200":
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "Jobs retrieved successfully"
+                  data:
+                    type: object
+                    properties:
+                      jobs:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Job"
+                      count:
+                        type: integer
+
+  /api/v1/jobs/{job_id}:
+    get:
+      summary: Get Job Status
+      description: Get the status of a specific job
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Job ID
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "Job status retrieved successfully"
+                  data:
+                    type: object
+                    properties:
+                      job_id:
+                        type: string
+                      status:
+                        type: string
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -318,6 +463,25 @@ components:
         commit_count:
           type: integer
 
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [sync, resync]
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        payload:
+          type: object
+
     SuccessResponse:
       type: object
       properties:
@@ -336,6 +500,4 @@ components:
           type: string
           example: "error"
         message:
-          type: string
-        error:
           type: string

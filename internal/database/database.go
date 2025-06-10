@@ -181,16 +181,38 @@ func (d *DB) GetRepositoryByName(ctx context.Context, fullName string) (*models.
 
 // UpdateLastCommitCheck updates the last commit check timestamp
 func (d *DB) UpdateLastCommitCheck(ctx context.Context, repoID int64, lastCheck time.Time) error {
-	query := `UPDATE repositories SET last_commit_check = $1 WHERE id = $2`
-	_, err := d.db.ExecContext(ctx, query, lastCheck, repoID)
-	return err
+	query := `UPDATE repositories SET last_commit_check = $1, updated_at_local = CURRENT_TIMESTAMP WHERE id = $2`
+	result, err := d.db.ExecContext(ctx, query, &lastCheck, repoID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("repository not found: %d", repoID)
+	}
+	return nil
 }
 
 // SetCommitsSince sets the commits_since timestamp
 func (d *DB) SetCommitsSince(ctx context.Context, repoID int64, since time.Time) error {
-	query := `UPDATE repositories SET commits_since = $1 WHERE id = $2`
-	_, err := d.db.ExecContext(ctx, query, since, repoID)
-	return err
+	query := `UPDATE repositories SET commits_since = $1, updated_at_local = CURRENT_TIMESTAMP WHERE id = $2`
+	result, err := d.db.ExecContext(ctx, query, &since, repoID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("repository not found: %d", repoID)
+	}
+	return nil
 }
 
 // CreateCommit creates a new commit record
@@ -230,14 +252,15 @@ func (d *DB) GetCommitsBySHA(ctx context.Context, repoID int64, sha string) (*mo
 }
 
 // GetCommitsByRepository retrieves commits for a repository with pagination
-func (d *DB) GetCommitsByRepository(ctx context.Context, repoID int64, limit, offset int) ([]*models.Commit, error) {
+func (d *DB) GetCommitsByRepository(ctx context.Context, repoID int64, page, perPage int) ([]*models.Commit, error) {
+	offset := (page - 1) * perPage
 	query := `
 		SELECT * FROM commits 
 		WHERE repository_id = $1 
 		ORDER BY commit_date DESC 
 		LIMIT $2 OFFSET $3`
 
-	rows, err := d.db.QueryContext(ctx, query, repoID, limit, offset)
+	rows, err := d.db.QueryContext(ctx, query, repoID, perPage, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +281,14 @@ func (d *DB) GetCommitsByRepository(ctx context.Context, repoID int64, limit, of
 		commits = append(commits, commit)
 	}
 	return commits, rows.Err()
+}
+
+// GetCommitCountByRepository returns the total number of commits for a repository
+func (d *DB) GetCommitCountByRepository(ctx context.Context, repoID int64) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM commits WHERE repository_id = $1`
+	err := d.db.QueryRowContext(ctx, query, repoID).Scan(&count)
+	return count, err
 }
 
 // GetTopCommitAuthors retrieves the top N commit authors by commit count
@@ -431,4 +462,9 @@ func (d *DB) RemoveMonitoredRepository(ctx context.Context, fullName string) err
 		return fmt.Errorf("monitored repository not found: %s", fullName)
 	}
 	return nil
+}
+
+// DB returns the underlying sql.DB instance
+func (d *DB) DB() *sql.DB {
+	return d.db
 }

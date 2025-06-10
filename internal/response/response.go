@@ -12,7 +12,23 @@ type Response struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// Success creates a new success response
+// PaginatedResponse represents a paginated API response
+type PaginatedResponse struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+	Meta    Pagination  `json:"meta"`
+}
+
+// Pagination contains pagination metadata
+type Pagination struct {
+	Page       int `json:"page"`
+	PerPage    int `json:"per_page"`
+	TotalItems int `json:"total_items"`
+	TotalPages int `json:"total_pages"`
+}
+
+// Success creates a successful response
 func Success(message string, data interface{}) Response {
 	return Response{
 		Status:  "success",
@@ -21,10 +37,26 @@ func Success(message string, data interface{}) Response {
 	}
 }
 
-// Error creates a new error response
+// SuccessPaginated creates a successful paginated response
+func SuccessPaginated(message string, data interface{}, page, perPage, totalItems int) PaginatedResponse {
+	totalPages := (totalItems + perPage - 1) / perPage // Ceiling division
+	return PaginatedResponse{
+		Status:  "success",
+		Message: message,
+		Data:    data,
+		Meta: Pagination{
+			Page:       page,
+			PerPage:    perPage,
+			TotalItems: totalItems,
+			TotalPages: totalPages,
+		},
+	}
+}
+
+// Error creates an error response
 func Error(message string) Response {
 	return Response{
-		Status:  "fail",
+		Status:  "error",
 		Message: message,
 	}
 }

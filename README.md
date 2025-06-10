@@ -2,33 +2,7 @@
 
 A Go service that monitors GitHub repositories, fetches commit information, and stores it in a PostgreSQL database. The service continuously syncs repository data and provides easy access to commit statistics through a RESTful API.
 
-## Features
-
-- Fetches and stores repository metadata
-- Continuously monitors repositories for new commits
-- Stores commit information in a PostgreSQL database
-- Configurable date range for commit fetching
-- RESTful API for managing repositories and retrieving statistics
-- Detailed commit analytics and author information
-- Swagger/OpenAPI documentation
-- Comprehensive database queries for analytics
-
-## Requirements
-
-- Go 1.21 or later
-- GitHub Personal Access Token
-- PostgreSQL 13 or later
-
-## Documentation
-
-The `/docs` folder contains comprehensive documentation for the service:
-
-- `api.yaml` - OpenAPI/Swagger specification for the REST API endpoints
-- `commit_queries.md` - Documentation for commit-related database operations and analytics
-- `repository_queries.md` - Documentation for repository management database operations
-- `chromium_test.md` - Example implementation using the Chromium repository
-
-## Installation and Setup
+## Quick Start with Docker
 
 1. Clone the repository:
 
@@ -37,213 +11,120 @@ git clone https://github.com/okeibunor/github-service.git
 cd github-service
 ```
 
-2. Install dependencies:
+2. Set up your GitHub token:
 
 ```bash
-go mod download
+export GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here
 ```
 
-3. Set up environment:
+3. Start the service using Docker Compose:
 
 ```bash
-make setup
+docker-compose up --build
 ```
 
-4. Configure your GitHub token:
+The service will be available at `http://localhost:8080`. The PostgreSQL database will be accessible at `localhost:5432`.
 
-   - Copy `.env.example` to `.env`
-   - Add your GitHub token and other required environment variables to or set it directly in your environment:
-     e.g
+To test with the Chromium repository: `./scripts/test-chromium.sh`
 
-     ````bash
-     export GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here
-     ``` `.env`:
+## Features
 
-     ````
+- Fetches and stores repository metadata
+- Continuously monitors repositories for new commits
+- Stores commit information in a PostgreSQL database
+- RESTful API for managing repositories and retrieving statistics
+- Detailed commit analytics and author information
+- Swagger/OpenAPI documentation
+- Repository metadata synchronization
+- Commit history tracking (fetches latest 100 commits per sync interval)
+- Author statistics
+- Configurable sync intervals
 
-     # Environment Variables
+## Architecture
 
-     # GitHub API Token (required)
+The service follows a modular, scalable architecture designed for reliability and maintainability. For detailed architecture documentation, see [docs/architecture.md](docs/architecture.md).
 
-     GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here
+### System Overview
 
-     # Database Configuration (required)
+```mermaid
+graph TB
+    subgraph "External Services"
+        GH["GitHub API"]
+    end
 
-     DB_HOST=<host>
-     DB_PORT=<port>
-     DB_USER=<user>
-     DB_PASSWORD=<password>
-     DB_NAME=<db>
-     DB_SSLMODE=require
+    subgraph "Application Layer"
+        API["API Server<br/>(HTTP/REST)"]
+        SVC["Service Layer<br/>(Business Logic)"]
+        GHC["GitHub Client"]
 
-     # Server Configuration
+        subgraph "Background Processing"
+            SW["Sync Worker"]
+            JW["Job Worker"]
+            JP["Job Pool"]
+        end
+    end
 
-     SERVER_PORT=8080
+    subgraph "Data Layer"
+        PG[("PostgreSQL<br/>Database")]
+        JQ["Job Queue"]
+    end
 
-     # GitHub Service Configuration (optional)
+    %% API Layer connections
+    API --> SVC
+    SVC --> GHC
+    GHC --> GH
 
-     GITHUB_SERVICE_MONITOR_INTERVAL=1h
-     GITHUB_SERVICE_MONITOR_ENABLED=true
-     GITHUB_SERVICE_LOG_LEVEL=info
-     GITHUB_SERVICE_LOG_FORMAT=json
+    %% Worker connections
+    SW --> SVC
+    JW --> SVC
+    JP --> JW
 
-     # GitHub API Configuration (optional)
+    %% Data Layer connections
+    SVC --> PG
+    JW --> JQ
+    JQ --> PG
 
-     GITHUB_SERVICE_GITHUB_RATE_LIMIT=1s
-     GITHUB_SERVICE_GITHUB_REQUEST_TIMEOUT=30s
-     GITHUB_SERVICE_GITHUB_MAX_RETRIES=3
-     GITHUB_SERVICE_GITHUB_RETRY_BACKOFF=2s
+    %% Configuration
+    CFG["Configuration<br/>(YAML + ENV)"] --> API
+    CFG --> SW
+    CFG --> JW
+```
 
-     # Log Configuration (optional)
+## Documentation
 
-     LOG_LEVEL=info
-     LOG_FORMAT=json
+The `/docs` folder contains comprehensive documentation:
 
-     ```
+- `api.yaml` - OpenAPI/Swagger specification
+- `commit_queries.md` - Commit-related database operations
+- `repository_queries.md` - Repository management operations
 
-     ```
+## Configuration
 
-5. Run the service:
+### Environment Variables
+
+The service can be configured using environment variables. When using Docker, these are already set in the `docker-compose.yml` file, but you can override them:
 
 ```bash
-make run
+# Required
+GITHUB_SERVICE_GITHUB_TOKEN=your_github_token_here  # GitHub Personal Access Token
+
+# Optional
+GITHUB_SERVICE_MONITOR_INTERVAL=1h     # Repository sync interval
+GITHUB_SERVICE_LOG_LEVEL=info         # Logging level (debug, info, warn, error)
+GITHUB_SERVICE_LOG_FORMAT=json        # Logging format (json, text)
+```
+
+### Custom Configuration
+
+For advanced configuration, you can modify the `config.yaml` file. When using Docker, mount your custom configuration:
+
+```bash
+docker-compose run -v $(pwd)/custom-config.yaml:/app/config.yaml app
 ```
 
 ## Security Notes
 
 - Never commit your GitHub token to version control
-- Use environment variables or `.env` file to manage sensitive credentials
-- The `.env` file is automatically ignored by git
-- Regularly rotate your GitHub token for better security
+- Use environment variables for sensitive credentials
+- Regularly rotate your GitHub token
 - Use the minimum required permissions for your GitHub token
-
-## Configuration
-
-The service can be configured using environment variables or a configuration file. For security, sensitive information like database credentials and API tokens should be provided through environment variables.
-
-### Required Environment Variables
-
-```bash
-# Database Configuration
-DB_HOST=localhost        # Database host
-DB_PORT=5432            # Database port
-DB_USER=postgres        # Database user
-DB_PASSWORD=<secret>    # Database password
-DB_NAME=github_service  # Database name
-DB_SSLMODE=require     # Database SSL mode
-
-# GitHub Configuration
-GITHUB_TOKEN=<secret>   # GitHub Personal Access Token
-
-# Optional Environment Variables
-MONITOR_INTERVAL=1h     # Repository sync interval
-LOG_LEVEL=info         # Logging level (debug, info, warn, error)
-LOG_FORMAT=json        # Logging format (json, text)
-```
-
-### Configuration File
-
-The service also supports configuration through a YAML file. Create a copy of `config.template.yaml` and modify it according to your needs:
-
-```bash
-cp config.template.yaml config.yaml
-```
-
-Note: Environment variables take precedence over values in the configuration file.
-
-### Security Best Practices
-
-1. Never commit sensitive information (passwords, tokens) to version control
-2. Use environment variables for secrets in production
-3. Keep the config.yaml file in .gitignore
-4. Use strong, unique passwords for database access
-5. Create a dedicated GitHub token with minimal required permissions
-
-## Getting Started
-
-1. Copy the configuration template:
-
-   ```bash
-   cp config.template.yaml config.yaml
-   ```
-
-2. Set up your environment variables:
-
-   ```bash
-   export DB_USER=your_db_user
-   export DB_PASSWORD=your_db_password
-   export DB_PORT=your_db_port
-   export DB_USER=your_db_username
-   export DB_NAME=your_db_name
-   export DB_SSLMODE=require
-
-   export GITHUB_TOKEN=your_github_token
-   ```
-
-3. Start the service:
-   ```bash
-   go run cmd/github-service/main.go
-   ```
-
-## API Documentation
-
-The service provides a RESTful API for managing repository synchronization. See the OpenAPI documentation in `docs/api.yaml` for details.
-
-## API Usage
-
-The service provides a RESTful API for managing repositories and retrieving data. Full API documentation is available in `/docs/api.yaml`.
-
-### Key Endpoints
-
-- `GET /api/v1/repositories` - List all tracked repositories
-- `PUT /api/v1/repositories/{owner}/{repo}` - Add a repository to track
-- `DELETE /api/v1/repositories/{owner}/{repo}` - Remove a repository
-- `GET /api/v1/repositories/{owner}/{repo}/commits` - Get repository commits
-- `POST /api/v1/repositories/{owner}/{repo}/sync` - Trigger manual sync
-
-## Database Schema
-
-### Repositories Table
-
-```sql
-CREATE TABLE repositories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    github_id INTEGER UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    full_name TEXT NOT NULL UNIQUE,
-    description TEXT,
-    url TEXT NOT NULL,
-    language TEXT,
-    forks_count INTEGER DEFAULT 0,
-    stars_count INTEGER DEFAULT 0,
-    open_issues_count INTEGER DEFAULT 0,
-    watchers_count INTEGER DEFAULT 0,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL,
-    last_commit_check TIMESTAMP,
-    commits_since TIMESTAMP,
-    created_at_local TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at_local TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### Commits Table
-
-```sql
-CREATE TABLE commits (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    repository_id INTEGER NOT NULL,
-    sha TEXT NOT NULL,
-    message TEXT NOT NULL,
-    author_name TEXT NOT NULL,
-    author_email TEXT NOT NULL,
-    author_date TIMESTAMP NOT NULL,
-    committer_name TEXT NOT NULL,
-    committer_email TEXT NOT NULL,
-    commit_date TIMESTAMP NOT NULL,
-    url TEXT NOT NULL,
-    created_at_local TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (repository_id) REFERENCES repositories(id) ON DELETE CASCADE,
-    UNIQUE(repository_id, sha)
-);
-```

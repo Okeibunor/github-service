@@ -35,19 +35,32 @@ func NewSyncWorker(service *service.Service, syncInterval, defaultAge time.Durat
 func (w *SyncWorker) AddRepository(ctx context.Context, owner, name string) error {
 	fullName := owner + "/" + name
 
+	// Check if repository is already being monitored
+	if w.IsRepositoryMonitored(ctx, fullName) {
+		return fmt.Errorf("repository %s is already being monitored", fullName)
+	}
+
 	// Add to database first
 	if err := w.service.DB().AddMonitoredRepository(ctx, fullName, w.syncInterval); err != nil {
 		return fmt.Errorf("failed to add repository to monitoring: %w", err)
 	}
 
-	// Perform initial sync
+	// Perform initial sync with rate limit awareness
 	since := time.Now().Add(-w.defaultAge)
-	if err := w.service.SyncRepository(ctx, owner, name, since); err != nil {
-		// If sync fails, mark repository as inactive
+	err := w.service.SyncRepository(ctx, owner, name, since)
+	if err != nil {
+		// If sync fails, remove from monitoring
 		if removeErr := w.service.DB().RemoveMonitoredRepository(ctx, fullName); removeErr != nil {
 			log.Printf("Failed to remove repository after sync failure: %v", removeErr)
 		}
-		return fmt.Errorf("initial sync failed: %w", err)
+
+		// Check if it's a rate limit error
+		if strings.Contains(strings.ToLower(err.Error()), "rate limit") {
+			return fmt.Errorf("github rate limit exceeded, please try again later: %w", err)
+		}
+
+		// Return detailed error
+		return fmt.Errorf("initial sync failed for %s: %w", fullName, err)
 	}
 
 	// Update last sync time
