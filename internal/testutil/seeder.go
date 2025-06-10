@@ -34,7 +34,10 @@ func SeedChromiumData(ctx context.Context, db *database.DB, githubToken string) 
 		WatchersCount:   repo.WatchersCount,
 		CreatedAt:       repo.CreatedAt,
 		UpdatedAt:       repo.UpdatedAt,
-		CommitsSince:    time.Time{},
+		LastCommitCheck: nil,
+		CommitsSince:    nil,
+		CreatedAtLocal:  time.Now(),
+		UpdatedAtLocal:  time.Now(),
 	}
 
 	if err := db.CreateRepository(ctx, dbRepo); err != nil {

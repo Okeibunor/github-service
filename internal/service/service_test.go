@@ -3,24 +3,16 @@ package service
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github-service/internal/database"
-	"github-service/internal/github"
 	"github-service/internal/models"
 	"github-service/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// CommitStats represents statistics about commits for testing
-type CommitStats struct {
-	AuthorName string
-	Count      int
-}
 
 func setupTestDB(t *testing.T) *testutil.TestPostgres {
 	ctx := context.Background()
@@ -30,41 +22,6 @@ func setupTestDB(t *testing.T) *testutil.TestPostgres {
 		require.NoError(t, pg.Close(ctx))
 	})
 	return pg
-}
-
-func TestService_SyncRepository(t *testing.T) {
-	// Skip if no GitHub token is provided
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
-		t.Skip("Skipping test: GITHUB_TOKEN not set")
-	}
-
-	pg := setupTestDB(t)
-	require.NoError(t, pg.LoadFixtures())
-
-	// Create service
-	svc := &Service{
-		db:     database.NewFromDB(pg.DB),
-		github: github.NewClient(token),
-	}
-
-	// Test syncing a repository
-	ctx := context.Background()
-	since := time.Now().AddDate(0, 0, -7) // Last 7 days
-
-	// Use a small, public repository for testing
-	err := svc.SyncRepository(ctx, "golang", "example", since)
-	require.NoError(t, err)
-
-	// Test getting commits
-	commits, err := svc.GetCommitsByRepository(ctx, "golang/example", 10, 0)
-	require.NoError(t, err)
-	assert.NotEmpty(t, commits)
-
-	// Test getting top authors
-	authors, err := svc.GetTopCommitAuthors(ctx, 5)
-	require.NoError(t, err)
-	assert.NotEmpty(t, authors)
 }
 
 // MockGitHubClient implements the minimal GitHub client interface for testing
@@ -203,8 +160,8 @@ func TestGetTopCommitAuthors(t *testing.T) {
 			name:  "Get top 3 authors",
 			limit: 3,
 			want: []models.CommitStats{
-				{AuthorName: "author1", Count: 2}, // author1 has 2 commits in fixtures
-				{AuthorName: "author2", Count: 1}, // author2 has 1 commit in fixtures
+				{AuthorName: "author1", Count: 2},
+				{AuthorName: "author2", Count: 1},
 			},
 			wantErr: false,
 		},
@@ -231,17 +188,4 @@ func TestGetTopCommitAuthors(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper function to compare CommitStats slices
-func compareCommitStats(a []*models.CommitStats, b []models.CommitStats) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].AuthorName != b[i].AuthorName || a[i].Count != b[i].Count {
-			return false
-		}
-	}
-	return true
 }

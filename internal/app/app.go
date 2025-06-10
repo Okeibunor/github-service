@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github-service/internal/config"
+	"github-service/internal/queue"
 	"github-service/internal/service"
 	"github-service/internal/worker"
 	"net/http"
@@ -26,14 +27,16 @@ type App struct {
 	service *service.Service
 	server  *http.Server
 	monitor *time.Ticker
+	queue   queue.Queue
 	worker  *worker.SyncWorker
 }
 
-func New(cfg *config.Config, log zerolog.Logger, svc *service.Service, worker *worker.SyncWorker) (*App, error) {
+func New(cfg *config.Config, log zerolog.Logger, svc *service.Service, queue queue.Queue, worker *worker.SyncWorker) (*App, error) {
 	app := &App{
 		cfg:     cfg,
 		log:     log,
 		service: svc,
+		queue:   queue,
 		worker:  worker,
 	}
 

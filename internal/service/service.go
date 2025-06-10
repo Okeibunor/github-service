@@ -149,16 +149,27 @@ func (s *Service) GetTopCommitAuthorsByRepository(ctx context.Context, fullName 
 }
 
 // GetCommitsByRepository returns commits for a repository with pagination
-func (s *Service) GetCommitsByRepository(ctx context.Context, fullName string, limit, offset int) ([]*models.Commit, error) {
+func (s *Service) GetCommitsByRepository(ctx context.Context, fullName string, page, perPage int) ([]*models.Commit, int, error) {
 	repo, err := s.db.GetRepositoryByName(ctx, fullName)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching repository: %w", err)
+		return nil, 0, fmt.Errorf("error fetching repository: %w", err)
 	}
 	if repo == nil {
-		return nil, fmt.Errorf("repository not found: %s", fullName)
+		return nil, 0, fmt.Errorf("repository not found: %s", fullName)
 	}
 
-	return s.db.GetCommitsByRepository(ctx, repo.ID, limit, offset)
+	// Get total count
+	totalCount, err := s.db.GetCommitCountByRepository(ctx, repo.ID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("error getting commit count: %w", err)
+	}
+
+	commits, err := s.db.GetCommitsByRepository(ctx, repo.ID, page, perPage)
+	if err != nil {
+		return nil, 0, fmt.Errorf("error fetching commits: %w", err)
+	}
+
+	return commits, totalCount, nil
 }
 
 // GetRepositoryByName retrieves a repository by its full name (owner/repo)

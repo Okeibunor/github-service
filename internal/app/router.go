@@ -34,6 +34,10 @@ func (a *App) initializeRouter(router *mux.Router) {
 
 	// Statistics endpoints with their own subrouter
 	initStatsRoutes(api.PathPrefix("/stats").Subrouter(), a)
+
+	// Jobs endpoints
+	api.HandleFunc("/jobs", a.listJobs).Methods(http.MethodGet)
+	api.HandleFunc("/jobs/{job_id}", a.getJobStatus).Methods(http.MethodGet)
 }
 
 // initRepositoryRoutes configures all repository-related routes

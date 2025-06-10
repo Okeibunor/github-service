@@ -4,23 +4,23 @@ import "time"
 
 // Repository represents a GitHub repository
 type Repository struct {
-	ID              int64     `json:"id"`
-	GitHubID        int64     `json:"github_id"`
-	Name            string    `json:"name"`
-	FullName        string    `json:"full_name"`
-	Description     string    `json:"description"`
-	URL             string    `json:"url"`
-	Language        string    `json:"language"`
-	ForksCount      int       `json:"forks_count"`
-	StarsCount      int       `json:"stargazers_count"`
-	OpenIssuesCount int       `json:"open_issues_count"`
-	WatchersCount   int       `json:"watchers_count"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	LastCommitCheck time.Time `json:"last_commit_check"`
-	CommitsSince    time.Time `json:"commits_since"`
-	CreatedAtLocal  time.Time `json:"created_at_local"`
-	UpdatedAtLocal  time.Time `json:"updated_at_local"`
+	ID              int64      `json:"id"`
+	GitHubID        int64      `json:"github_id"`
+	Name            string     `json:"name"`
+	FullName        string     `json:"full_name"`
+	Description     string     `json:"description"`
+	URL             string     `json:"url"`
+	Language        string     `json:"language"`
+	ForksCount      int        `json:"forks_count"`
+	StarsCount      int        `json:"stargazers_count"`
+	OpenIssuesCount int        `json:"open_issues_count"`
+	WatchersCount   int        `json:"watchers_count"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	LastCommitCheck *time.Time `json:"last_commit_check"`
+	CommitsSince    *time.Time `json:"commits_since"`
+	CreatedAtLocal  time.Time  `json:"created_at_local"`
+	UpdatedAtLocal  time.Time  `json:"updated_at_local"`
 }
 
 // Commit represents a Git commit in our database

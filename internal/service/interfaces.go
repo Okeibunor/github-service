@@ -23,7 +23,8 @@ type Database interface {
 	SetCommitsSince(ctx context.Context, repoID int64, since time.Time) error
 	CreateCommit(ctx context.Context, commit *models.Commit) error
 	GetCommitsBySHA(ctx context.Context, repoID int64, sha string) (*models.Commit, error)
-	GetCommitsByRepository(ctx context.Context, repoID int64, limit, offset int) ([]*models.Commit, error)
+	GetCommitsByRepository(ctx context.Context, repoID int64, page, perPage int) ([]*models.Commit, error)
+	GetCommitCountByRepository(ctx context.Context, repoID int64) (int, error)
 	GetTopCommitAuthors(ctx context.Context, limit int) ([]*models.CommitStats, error)
 	GetTopCommitAuthorsByRepository(ctx context.Context, repoID int64, limit int) ([]*models.CommitStats, error)
 	DeleteRepository(ctx context.Context, repoID int64) error

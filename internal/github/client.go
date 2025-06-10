@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 var baseURL = "https://api.github.com"
@@ -31,6 +33,7 @@ type GitHubClient interface {
 type Client struct {
 	httpClient *http.Client
 	token      string
+	logger     zerolog.Logger
 
 	// Rate limiting
 	rateLimitMu sync.RWMutex
@@ -44,6 +47,10 @@ func NewClient(token string) *Client {
 			Timeout: time.Second * 30,
 		},
 		token: token,
+		logger: zerolog.New(zerolog.NewConsoleWriter()).With().
+			Str("component", "github_client").
+			Timestamp().
+			Logger(),
 		rateLimit: RateLimitInfo{
 			Remaining: 60, // Default GitHub API limit
 			Reset:     time.Now().Add(time.Hour),
@@ -186,6 +193,7 @@ func (c *Client) GetRepository(ctx context.Context, owner, repo string) (*models
 	}
 
 	// Convert to models.Repository
+	now := time.Now()
 	return &models.Repository{
 		GitHubID:        repository.ID,
 		Name:            repository.Name,
@@ -199,18 +207,44 @@ func (c *Client) GetRepository(ctx context.Context, owner, repo string) (*models
 		WatchersCount:   repository.WatchersCount,
 		CreatedAt:       repository.CreatedAt,
 		UpdatedAt:       repository.UpdatedAt,
+		LastCommitCheck: &now, // Initialize with current time
+		CommitsSince:    nil,  // Initialize as nil since we haven't fetched commits yet
+		CreatedAtLocal:  now,
+		UpdatedAtLocal:  now,
 	}, nil
 }
 
 // GetCommits fetches commits from GitHub since a specific time
 func (c *Client) GetCommits(ctx context.Context, owner, repo string, since time.Time) ([]models.CommitResponse, error) {
 	var allCommits []models.CommitResponse
-	page := 1
 	perPage := 100 // GitHub's maximum per page
+	maxRetries := 3
+	baseDelay := time.Second
+	totalCommits := 0
 
-	for {
-		url := fmt.Sprintf("%s/repos/%s/%s/commits?since=%s&page=%d&per_page=%d",
-			baseURL, owner, repo, since.Format(time.RFC3339), page, perPage)
+	c.logger.Info().
+		Str("owner", owner).
+		Str("repo", repo).
+		Time("since", since).
+		Msg("Starting commit fetch")
+
+	// Create URL for first page, sorting by most recent first
+	url := fmt.Sprintf("%s/repos/%s/%s/commits?since=%s&per_page=%d&sort=desc&order=date",
+		baseURL, owner, repo, since.Format(time.RFC3339), perPage)
+
+	var pageCommits []CommitResponse
+	var resp *http.Response
+	var err error
+
+	// Retry loop with exponential backoff
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			c.logger.Warn().
+				Str("owner", owner).
+				Str("repo", repo).
+				Int("attempt", attempt+1).
+				Msg("Retrying commit fetch")
+		}
 
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
@@ -218,53 +252,67 @@ func (c *Client) GetCommits(ctx context.Context, owner, repo string, since time.
 		}
 
 		c.setHeaders(req)
-		resp, err := c.doRequest(req)
-		if err != nil {
-			return nil, fmt.Errorf("executing request: %w", err)
-		}
-		defer resp.Body.Close()
+		resp, err = c.doRequest(req)
 
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-		}
-
-		var pageCommits []CommitResponse
-		if err := json.NewDecoder(resp.Body).Decode(&pageCommits); err != nil {
-			return nil, fmt.Errorf("decoding response: %w", err)
-		}
-
-		// Convert to models.CommitResponse
-		for _, commit := range pageCommits {
-			modelCommit := models.CommitResponse{
-				SHA:     commit.SHA,
-				HTMLURL: commit.HTMLURL,
+		if err == nil && resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			if err := json.NewDecoder(resp.Body).Decode(&pageCommits); err == nil {
+				break // Success, exit retry loop
 			}
-			modelCommit.Commit.Message = commit.Commit.Message
-			modelCommit.Commit.Author = models.CommitAuthor{
-				Name:  commit.Commit.Author.Name,
-				Email: commit.Commit.Author.Email,
-				Date:  commit.Commit.Author.Date,
+		}
+
+		// If we get here, either the request failed or JSON decoding failed
+		if resp != nil {
+			resp.Body.Close()
+		}
+
+		// Check if we should retry
+		if attempt < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(baseDelay * time.Duration(1<<attempt)): // Exponential backoff
+				continue
 			}
-			modelCommit.Commit.Committer = models.CommitAuthor{
-				Name:  commit.Commit.Committer.Name,
-				Email: commit.Commit.Committer.Email,
-				Date:  commit.Commit.Committer.Date,
-			}
-			allCommits = append(allCommits, modelCommit)
 		}
-
-		// Check if we've reached the last page
-		if len(pageCommits) < perPage {
-			break
-		}
-
-		// Check for rate limiting before proceeding to next page
-		if err := c.checkRateLimit(ctx); err != nil {
-			return nil, fmt.Errorf("rate limit check for next page: %w", err)
-		}
-
-		page++
 	}
+
+	// If all retries failed
+	if err != nil {
+		c.logger.Error().
+			Str("owner", owner).
+			Str("repo", repo).
+			Err(err).
+			Msg("Failed to fetch commits after all retries")
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+
+	// Convert to models.CommitResponse and append
+	for _, commit := range pageCommits {
+		modelCommit := models.CommitResponse{
+			SHA:     commit.SHA,
+			HTMLURL: commit.HTMLURL,
+		}
+		modelCommit.Commit.Message = commit.Commit.Message
+		modelCommit.Commit.Author = models.CommitAuthor{
+			Name:  commit.Commit.Author.Name,
+			Email: commit.Commit.Author.Email,
+			Date:  commit.Commit.Author.Date,
+		}
+		modelCommit.Commit.Committer = models.CommitAuthor{
+			Name:  commit.Commit.Committer.Name,
+			Email: commit.Commit.Committer.Email,
+			Date:  commit.Commit.Committer.Date,
+		}
+		allCommits = append(allCommits, modelCommit)
+	}
+
+	totalCommits = len(pageCommits)
+	c.logger.Info().
+		Str("owner", owner).
+		Str("repo", repo).
+		Int("commits_fetched", totalCommits).
+		Msg("Completed commit fetch")
 
 	return allCommits, nil
 }

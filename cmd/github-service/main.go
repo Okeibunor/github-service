@@ -15,6 +15,7 @@ import (
 	"github-service/internal/config"
 	"github-service/internal/database"
 	"github-service/internal/github"
+	"github-service/internal/queue"
 	"github-service/internal/service"
 	"github-service/internal/worker"
 
@@ -35,63 +36,53 @@ func main() {
 		log.Fatalf("Error loading config: %v", err)
 	}
 
-	// Log DSN for debugging
-	log.Printf("Using DSN: %s", cfg.GetDSN())
-
-	// Set up database connection
+	// Initialize database connection
 	db, err := database.New(cfg.GetDSN())
 	if err != nil {
 		log.Fatalf("Error connecting to database: %v", err)
 	}
 	defer db.Close()
 
-	// Create GitHub client
+	// Initialize GitHub client
 	githubClient := github.NewClient(cfg.GitHub.Token)
 
-	// Create service
-	svc := service.New(githubClient, db, &logger)
+	// Create service layer
+	svcLogger := logger.With().Str("component", "service").Logger()
+	svc := service.New(githubClient, db, &svcLogger)
 
-	// Create and start sync worker
-	syncWorker := worker.NewSyncWorker(
-		svc,
-		cfg.GitHub.Interval,
-		7*24*time.Hour, // Default sync age of 7 days
-	)
+	// Create job queue
+	jobQueue, err := queue.NewPostgresQueue(db.DB())
+	if err != nil {
+		log.Fatalf("Error creating job queue: %v", err)
+	}
 
-	// Set up context with cancellation
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Create sync worker for repository monitoring
+	syncWorker := worker.NewSyncWorker(svc, cfg.GitHub.Interval, 7*24*time.Hour)
 
-	// Start the worker
-	go syncWorker.Start(ctx)
-
-	// Set up signal handling for graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	// Create job worker
+	workerLogger := logger.With().Str("component", "worker").Logger()
+	jobWorker := worker.NewJobWorker(jobQueue, svc, workerLogger)
 
 	// Initialize and start the application
-	app, err := app.New(cfg, logger, svc, syncWorker)
+	app, err := app.New(cfg, logger, svc, jobQueue, syncWorker)
 	if err != nil {
 		log.Fatalf("Error creating application: %v", err)
 	}
 
+	// Create context that listens for the interrupt signal
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Start job worker in a goroutine
+	go func() {
+		if err := jobWorker.Start(ctx); err != nil {
+			logger.Error().Err(err).Msg("Job worker error")
+		}
+	}()
+
 	// Start the application
 	if err := app.Run(ctx); err != nil {
-		log.Fatalf("Error running application: %v", err)
+		logger.Error().Err(err).Msg("Application error")
+		os.Exit(1)
 	}
-
-	// Wait for shutdown signal
-	<-sigChan
-	log.Println("Shutting down...")
-
-	// Stop the worker
-	syncWorker.Stop()
-
-	// Create a context with timeout for shutdown
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-
-	// Wait for context to be done
-	<-shutdownCtx.Done()
-	log.Println("Shutdown complete")
 }
